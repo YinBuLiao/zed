@@ -16,7 +16,11 @@ jobs:
             ref: 561e54cb2d1ece3c18cf06dfb6ed7c824918dd25
     name: ${{ matrix.label }}
     runs-on: windows-2022
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
+      - name: Enable long paths
+        run: git config --system core.longpaths true
       - uses: actions/checkout@v4
         with:
           ref: ${{ matrix.ref }}
