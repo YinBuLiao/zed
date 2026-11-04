@@ -1,0 +1,26 @@
+name: Validate DirectWrite face cache
+on:
+  push:
+    branches: [validate/directwrite-face-cache-lifetime]
+permissions:
+  contents: read
+jobs:
+  direct-write-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: regression-test-only
+            ref: ddecb9fcfdcfbb208717acf5eea0ccc1f9aa3a71
+          - label: with-fix
+            ref: 561e54cb2d1ece3c18cf06dfb6ed7c824918dd25
+    name: ${{ matrix.label }}
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+      - name: Show toolchain
+        run: rustup show
+      - name: Run DirectWrite tests
+        run: cargo test -p gpui_windows --lib direct_write::tests -- --nocapture --test-threads=1
