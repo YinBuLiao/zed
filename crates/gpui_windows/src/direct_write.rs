@@ -1974,6 +1974,96 @@ mod tests {
         Ok(())
     }
 
+    /// DirectWrite serves transient font faces for fallback and synthesized
+    /// styles. Once a layout is released those COM objects can be freed and a
+    /// different face can be allocated at the same address, so every glyph run
+    /// must still be attributed to the face that produced its glyph indices.
+    #[test]
+    fn fallback_glyph_runs_keep_their_served_font_after_layouts_are_released() -> anyhow::Result<()>
+    {
+        use super::*;
+
+        const TEXT: &str = "Close 关闭此标签页？执行指南 AI-执行指南.md";
+        let primaries = [
+            "Segoe UI",
+            "Times New Roman",
+            "Consolas",
+            "Cambria",
+            "Arial",
+        ];
+        let styles = [
+            (FontWeight::NORMAL, FontStyle::Normal),
+            (FontWeight::NORMAL, FontStyle::Italic),
+            (FontWeight::SEMIBOLD, FontStyle::Normal),
+            (FontWeight::BOLD, FontStyle::Italic),
+        ];
+        let requests: Vec<Font> = primaries
+            .iter()
+            .flat_map(|family| {
+                styles.iter().map(|&(weight, style)| Font {
+                    weight,
+                    style,
+                    ..font(*family)
+                })
+            })
+            .collect();
+
+        let shape = |text_system: &DirectWriteTextSystem,
+                     request: &Font|
+         -> anyhow::Result<Vec<(Option<Font>, Vec<GlyphId>)>> {
+            let font_id = text_system.font_id(request)?;
+            let layout = text_system.layout_line(
+                TEXT,
+                px(16.0),
+                &[FontRun {
+                    len: TEXT.len(),
+                    font_id,
+                }],
+            );
+            let state = text_system.state.read();
+            Ok(layout
+                .runs
+                .iter()
+                .map(|run| {
+                    let face = &state.fonts[run.font_id.0].font_face;
+                    (
+                        font_face_to_font(face, &text_system.components.locale),
+                        run.glyphs.iter().map(|glyph| glyph.id).collect(),
+                    )
+                })
+                .collect())
+        };
+
+        let devices = DirectXDevices::new()?;
+        // A fresh text system has no attribution cache, so its first layout is
+        // the expected face for each glyph run.
+        let expected = requests
+            .iter()
+            .map(|request| shape(&DirectWriteTextSystem::new(&devices)?, request))
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        assert!(
+            expected
+                .iter()
+                .flatten()
+                .any(|(font, _)| font.as_ref().is_some_and(|font| primaries
+                    .iter()
+                    .all(|primary| !font.family.eq_ignore_ascii_case(primary)))),
+            "the CJK text must be shaped through a fallback face"
+        );
+
+        let text_system = DirectWriteTextSystem::new(&devices)?;
+        for round in 0..12 {
+            for (request, expected) in requests.iter().zip(&expected) {
+                assert_eq!(
+                    &shape(&text_system, request)?,
+                    expected,
+                    "round {round}: {request:?} glyph runs were attributed to another face"
+                );
+            }
+        }
+        Ok(())
+    }
+
     #[test]
     fn test_cluster_map() {
         let cluster_map = [0];
