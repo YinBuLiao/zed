@@ -11,9 +11,9 @@ jobs:
       matrix:
         include:
           - label: regression-test-only
-            ref: ddecb9fcfdcfbb208717acf5eea0ccc1f9aa3a71
+            ref: a52fa396d89f9572579f87eb1f879e86f58efbe9
           - label: with-fix
-            ref: 561e54cb2d1ece3c18cf06dfb6ed7c824918dd25
+            ref: 22fc166ba3b524aedb41bdba5a45bdd1c9146393
     name: ${{ matrix.label }}
     runs-on: windows-2022
     env:
